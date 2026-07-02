@@ -1,0 +1,137 @@
+version: "3.9"
+
+# =============================================================================
+# SQLMentor – Docker Compose
+# Educational AI-Powered SQL Injection Learning Platform
+# =============================================================================
+
+services:
+  # ── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sqlmentor_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sqlmentor}
+      POSTGRES_USER: ${POSTGRES_USER:-sqlmentor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "127.0.0.1:5432:5432"  # Bind to localhost only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sqlmentor} -d ${POSTGRES_DB:-sqlmentor}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sqlmentor_internal
+
+  # ── Redis ──────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sqlmentor_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redispass}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"  # Bind to localhost only
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-redispass}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sqlmentor_internal
+
+  # ── Backend (FastAPI) ──────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/Dockerfile.backend
+    container_name: sqlmentor_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-sqlmentor}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-sqlmentor}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redispass}@redis:6379/0
+    volumes:
+      - ./backend:/app
+      - exports_data:/app/exports
+      - uploads_data:/app/uploads
+    ports:
+      - "127.0.0.1:8000:8000"  # Bind to localhost only (Nginx proxies)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sqlmentor_internal
+
+  # ── Frontend (Vite → Nginx) ────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/Dockerfile.frontend
+      args:
+        VITE_API_URL: ${API_URL:-http://localhost:8000}
+        VITE_APP_NAME: ${APP_NAME:-SQLMentor}
+    container_name: sqlmentor_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - sqlmentor_internal
+
+  # ── Nginx (Reverse Proxy) ─────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: sqlmentor_nginx
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+      - "8443:443"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+      - exports_data:/app/exports:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - sqlmentor_internal
+      - sqlmentor_public
+
+  # ── DVWA Lab (Optional – Intentionally Vulnerable Demo Target) ─────────────
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    container_name: sqlmentor_dvwa_lab
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:80"  # Accessible only locally
+    networks:
+      - sqlmentor_internal
+    profiles:
+      - lab  # Only starts with: docker-compose --profile lab up
+
+volumes:
+  postgres_data:
+  redis_data:
+  exports_data:
+  uploads_data:
+
+networks:
+  sqlmentor_internal:
+    driver: bridge
+    internal: true  # No direct external access
+  sqlmentor_public:
+    driver: bridge
