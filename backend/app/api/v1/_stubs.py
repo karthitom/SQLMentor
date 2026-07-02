@@ -8,7 +8,7 @@ from app.schemas.common import MessageResponse
 # Reports router
 reports_router = APIRouter()
 
-@reports_router.get("")
+@reports_router.get("/")
 async def list_reports(current_user: User = Depends(get_current_user)):
     return {"reports": [], "message": "Reports module - full implementation in extended version"}
 
