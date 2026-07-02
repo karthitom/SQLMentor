@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: sqlmentor-api
+    env: docker
+    region: ohio
+    plan: free
+    dockerContext: backend
+    dockerfilePath: backend/Dockerfile
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: CORS_ORIGINS
+        value: https://your-frontend.web.app
+      # Provide FIREBASE_SERVICE_ACCOUNT_BASE64 and OPENAI_API_KEY in the Render dashboard

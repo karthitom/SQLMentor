@@ -1,28 +1,23 @@
-"""Workspaces API router."""
+"""Workspaces API router using Firestore."""
 
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
+from firebase_admin import firestore
 
-from app.api.deps import get_current_user
-from app.core.database import get_db
+from app.api.deps import get_current_user, get_db
 from app.models.user import User
-from app.models.workspace import Workspace, WorkspaceTag
-from app.schemas.common import MessageResponse, PaginatedResponse
+from app.models.workspace import Workspace
+from app.schemas.common import MessageResponse
 
 router = APIRouter()
-
 
 class WorkspaceCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     description: Optional[str] = Field(None, max_length=500)
     color: Optional[str] = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
     icon: Optional[str] = Field(None, max_length=32)
-
 
 class WorkspaceUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=128)
@@ -33,36 +28,20 @@ class WorkspaceUpdate(BaseModel):
     is_archived: Optional[bool] = None
 
 
-class WorkspaceResponse(BaseModel):
-    model_config = {"from_attributes": True}
-    id: str
-    name: str
-    description: Optional[str]
-    color: Optional[str]
-    icon: Optional[str]
-    is_pinned: bool
-    is_archived: bool
-    owner_id: str
-    from app.models.workspace import WorkspaceTag as WTag
-    from datetime import datetime
-    created_at: datetime
-    updated_at: datetime
-
-
 @router.get("", response_model=list[dict])
 async def list_workspaces(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: firestore.firestore.Client = Depends(get_db),
     include_archived: bool = False,
 ) -> list[dict]:
     """List all workspaces for the current user."""
-    query = select(Workspace).where(Workspace.owner_id == current_user.id)
+    query = db.collection("workspaces").where("owner_id", "==", current_user.id)
     if not include_archived:
-        query = query.where(Workspace.is_archived == False)
-    query = query.order_by(Workspace.is_pinned.desc(), Workspace.updated_at.desc())
-
-    result = await db.execute(query)
-    workspaces = result.scalars().all()
+        query = query.where("is_archived", "==", False)
+    
+    docs = query.stream()
+    workspaces = [Workspace(**doc.to_dict()) for doc in docs]
+    workspaces.sort(key=lambda w: (w.is_pinned, w.updated_at.isoformat()), reverse=True)
 
     return [
         {
@@ -84,7 +63,7 @@ async def list_workspaces(
 async def create_workspace(
     data: WorkspaceCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: firestore.firestore.Client = Depends(get_db),
 ) -> dict:
     """Create a new workspace."""
     workspace = Workspace(
@@ -94,9 +73,7 @@ async def create_workspace(
         color=data.color,
         icon=data.icon,
     )
-    db.add(workspace)
-    await db.flush()
-    await db.refresh(workspace)
+    db.collection("workspaces").document(workspace.id).set(workspace.model_dump(mode="json"))
 
     return {
         "id": workspace.id,
@@ -114,17 +91,15 @@ async def create_workspace(
 async def get_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: firestore.firestore.Client = Depends(get_db),
 ) -> dict:
     """Get a workspace by ID. Validates ownership."""
-    result = await db.execute(
-        select(Workspace).where(
-            Workspace.id == workspace_id,
-            Workspace.owner_id == current_user.id,  # Ownership check — users only see their own
-        )
-    )
-    workspace = result.scalar_one_or_none()
-    if not workspace:
+    doc = db.collection("workspaces").document(workspace_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        
+    workspace = Workspace(**doc.to_dict())
+    if workspace.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
 
     return {
@@ -146,24 +121,24 @@ async def update_workspace(
     workspace_id: str,
     data: WorkspaceUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: firestore.firestore.Client = Depends(get_db),
 ) -> dict:
     """Update a workspace. Validates ownership."""
-    result = await db.execute(
-        select(Workspace).where(
-            Workspace.id == workspace_id,
-            Workspace.owner_id == current_user.id,
-        )
-    )
-    workspace = result.scalar_one_or_none()
-    if not workspace:
+    doc_ref = db.collection("workspaces").document(workspace_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        
+    workspace = Workspace(**doc.to_dict())
+    if workspace.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
 
     update_data = data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(workspace, key, value)
+    if update_data:
+        from datetime import datetime, timezone
+        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        doc_ref.update(update_data)
 
-    await db.flush()
     return {"id": workspace.id, "message": "Updated successfully"}
 
 
@@ -171,18 +146,17 @@ async def update_workspace(
 async def delete_workspace(
     workspace_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: firestore.firestore.Client = Depends(get_db),
 ) -> MessageResponse:
     """Delete a workspace and all its projects/analyses."""
-    result = await db.execute(
-        select(Workspace).where(
-            Workspace.id == workspace_id,
-            Workspace.owner_id == current_user.id,
-        )
-    )
-    workspace = result.scalar_one_or_none()
-    if not workspace:
+    doc_ref = db.collection("workspaces").document(workspace_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
+        
+    workspace = Workspace(**doc.to_dict())
+    if workspace.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
 
-    await db.delete(workspace)
+    doc_ref.delete()
     return MessageResponse(message="Workspace deleted")

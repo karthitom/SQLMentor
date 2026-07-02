@@ -1,4 +1,4 @@
-"""Models package — import all for Alembic autogenerate."""
+"""Models package — Pydantic models for Firestore documents."""
 
 from app.models.user import User, UserSession
 from app.models.workspace import Workspace, WorkspaceTag

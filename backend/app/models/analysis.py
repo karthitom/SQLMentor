@@ -1,135 +1,63 @@
-"""Analysis models — captures URL analysis sessions, parameters, and responses."""
+"""Analysis models mapped to Firestore."""
 
-import uuid
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timezone
+from pydantic import BaseModel, Field
+import uuid
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text, Boolean
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+class AnalysisParameter(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    analysis_id: str
+    name: str
+    location: str
+    value_sample: Optional[str] = None
+    is_interesting: bool = False
+    notes: Optional[str] = None
 
-from app.core.database import Base
+class AnalysisResponse(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    analysis_id: str
+    request_url: str
+    request_method: str
+    request_params: Optional[Dict[str, Any]] = None
+    request_headers: Optional[Dict[str, Any]] = None
+    response_status: Optional[int] = None
+    response_size: Optional[int] = None
+    response_time_ms: Optional[float] = None
+    response_headers: Optional[Dict[str, Any]] = None
+    response_body_excerpt: Optional[str] = None
+    response_type: Optional[str] = None
+    label: Optional[str] = None
+    captured_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+class ResponseComparison(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    analysis_id: str
+    baseline_response_id: str
+    modified_response_id: str
+    similarity_score: Optional[float] = None
+    size_difference: Optional[int] = None
+    time_difference_ms: Optional[float] = None
+    status_changed: bool = False
+    diff_data: Optional[Dict[str, Any]] = None
+    observable_changes: Optional[List[Any]] = None
+    ai_analysis: Optional[Dict[str, Any]] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-class Analysis(Base):
-    """An educational analysis session of a lab application."""
-
-    __tablename__ = "analyses"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
-    )
-    target_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    title: Mapped[str] = mapped_column(String(256), nullable=True)
-    description: Mapped[str] = mapped_column(Text, nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(32), default="pending", nullable=False
-    )  # pending, running, completed, failed
-    error_message: Mapped[str] = mapped_column(Text, nullable=True)
-
-    # Discovered parameters
-    parameters_count: Mapped[int] = mapped_column(Integer, default=0)
-
-    # AI explanation
-    ai_explanation: Mapped[dict] = mapped_column(JSON, nullable=True)
-    ai_model_used: Mapped[str] = mapped_column(String(64), nullable=True)
-
-    # Observations
-    observations: Mapped[dict] = mapped_column(JSON, nullable=True)
-
-    # Learning metadata
-    concepts_demonstrated: Mapped[list] = mapped_column(JSON, nullable=True)
-    difficulty_level: Mapped[str] = mapped_column(String(16), nullable=True)
-    learning_notes: Mapped[str] = mapped_column(Text, nullable=True)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    # Relationships
-    project: Mapped["Project"] = relationship("Project", back_populates="analyses")
-    parameters: Mapped[list["AnalysisParameter"]] = relationship(
-        "AnalysisParameter", back_populates="analysis", cascade="all, delete-orphan"
-    )
-    responses: Mapped[list["AnalysisResponse"]] = relationship(
-        "AnalysisResponse", back_populates="analysis", cascade="all, delete-orphan"
-    )
-    comparisons: Mapped[list["ResponseComparison"]] = relationship(
-        "ResponseComparison", back_populates="analysis", cascade="all, delete-orphan"
-    )
-
-
-class AnalysisParameter(Base):
-    """A discovered input parameter in the target lab application."""
-
-    __tablename__ = "analysis_parameters"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    analysis_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("analyses.id", ondelete="CASCADE"), nullable=False
-    )
-    name: Mapped[str] = mapped_column(String(256), nullable=False)
-    location: Mapped[str] = mapped_column(
-        String(32), nullable=False
-    )  # query, form, header, cookie, json_body
-    value_sample: Mapped[str] = mapped_column(String(1024), nullable=True)
-    is_interesting: Mapped[bool] = mapped_column(Boolean, default=False)
-    notes: Mapped[str] = mapped_column(Text, nullable=True)
-
-    analysis: Mapped["Analysis"] = relationship("Analysis", back_populates="parameters")
-
-
-class AnalysisResponse(Base):
-    """A captured HTTP response from a lab application."""
-
-    __tablename__ = "analysis_responses"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    analysis_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("analyses.id", ondelete="CASCADE"), nullable=False
-    )
-    request_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    request_method: Mapped[str] = mapped_column(String(10), nullable=False)
-    request_params: Mapped[dict] = mapped_column(JSON, nullable=True)
-    request_headers: Mapped[dict] = mapped_column(JSON, nullable=True)
-    response_status: Mapped[int] = mapped_column(Integer, nullable=True)
-    response_size: Mapped[int] = mapped_column(Integer, nullable=True)
-    response_time_ms: Mapped[float] = mapped_column(Float, nullable=True)
-    response_headers: Mapped[dict] = mapped_column(JSON, nullable=True)
-    response_body_excerpt: Mapped[str] = mapped_column(Text, nullable=True)  # First 10KB
-    response_type: Mapped[str] = mapped_column(String(32), nullable=True)  # baseline, test
-    label: Mapped[str] = mapped_column(String(128), nullable=True)  # "Normal", "Modified Input"
-    captured_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
-    analysis: Mapped["Analysis"] = relationship("Analysis", back_populates="responses")
-
-
-class ResponseComparison(Base):
-    """Comparison between two analysis responses."""
-
-    __tablename__ = "response_comparisons"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    analysis_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("analyses.id", ondelete="CASCADE"), nullable=False
-    )
-    baseline_response_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("analysis_responses.id"), nullable=False
-    )
-    modified_response_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("analysis_responses.id"), nullable=False
-    )
-    similarity_score: Mapped[float] = mapped_column(Float, nullable=True)  # 0.0 - 1.0
-    size_difference: Mapped[int] = mapped_column(Integer, nullable=True)
-    time_difference_ms: Mapped[float] = mapped_column(Float, nullable=True)
-    status_changed: Mapped[bool] = mapped_column(Boolean, default=False)
-    diff_data: Mapped[dict] = mapped_column(JSON, nullable=True)  # Structured diff
-    observable_changes: Mapped[list] = mapped_column(JSON, nullable=True)
-    ai_analysis: Mapped[dict] = mapped_column(JSON, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
-    analysis: Mapped["Analysis"] = relationship("Analysis", back_populates="comparisons")
+class Analysis(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    project_id: str
+    target_url: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    status: str = "pending"
+    error_message: Optional[str] = None
+    parameters_count: int = 0
+    ai_explanation: Optional[Dict[str, Any]] = None
+    ai_model_used: Optional[str] = None
+    observations: Optional[Dict[str, Any]] = None
+    concepts_demonstrated: Optional[List[Any]] = None
+    difficulty_level: Optional[str] = None
+    learning_notes: Optional[str] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = None

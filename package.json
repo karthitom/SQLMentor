@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "firebase": "^12.15.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.3"
+  }
+}

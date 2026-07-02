@@ -35,7 +35,7 @@ const step3Schema = z.object({
   parameter_location: z.enum(['query', 'form', 'header', 'cookie', 'json_body']),
   baseline_value: z.string().min(1, 'Baseline value is required'),
   test_value: z.string().min(1, 'Test value is required'),
-  request_method: z.enum(['GET', 'POST']).default('GET'),
+  request_method: z.enum(['GET', 'POST']),
 })
 
 type Step1Form = z.infer<typeof step1Schema>

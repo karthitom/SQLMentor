@@ -4,8 +4,6 @@ All secrets MUST come from environment variables — no hardcoded defaults for p
 """
 
 import logging
-import os
-import secrets
 from functools import lru_cache
 from typing import Literal
 
@@ -28,15 +26,9 @@ class Settings(BaseSettings):
     APP_URL: str = "http://localhost:3000"
     API_URL: str = "http://localhost:8000"
 
-    # ── Security / JWT ────────────────────────────────────────────────────────
-    JWT_SECRET_KEY: str = ""  # MUST be set in production
-    JWT_ALGORITHM: str = "HS256"  # Hardcoded — never 'none'
-    JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    JWT_REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    CSRF_SECRET_KEY: str = ""  # MUST be set in production
-
-    # ── Database ──────────────────────────────────────────────────────────────
-    DATABASE_URL: str = "sqlite+aiosqlite:///./sqlmentor.db"
+    # ── Firebase ──────────────────────────────────────────────────────────────
+    FIREBASE_SERVICE_ACCOUNT_BASE64: str = ""  # Base64 encoded JSON
+    FIREBASE_STORAGE_BUCKET: str = ""
 
     # ── Redis ─────────────────────────────────────────────────────────────────
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -67,13 +59,7 @@ class Settings(BaseSettings):
     ANALYSIS_MAX_RESPONSE_SIZE: int = 1_048_576  # 1MB
     ANALYSIS_ALLOWED_SCHEMES: str = "http,https"
 
-    # ── Admin Bootstrap ───────────────────────────────────────────────────────
-    ADMIN_EMAIL: str = "admin@sqlmentor.local"
-    ADMIN_PASSWORD: str = ""
-
     # ── Exports / Uploads ─────────────────────────────────────────────────────
-    REPORTS_EXPORT_DIR: str = "/app/exports"
-    UPLOAD_DIR: str = "/app/uploads"
     MAX_UPLOAD_SIZE_MB: int = 10
 
     # ── Logging ───────────────────────────────────────────────────────────────
@@ -93,45 +79,6 @@ class Settings(BaseSettings):
     @property
     def analysis_allowed_schemes_list(self) -> list[str]:
         return [s.strip() for s in self.ANALYSIS_ALLOWED_SCHEMES.split(",") if s.strip()]
-
-    def get_jwt_secret(self) -> str:
-        """
-        Resolve JWT secret with a secure multi-tiered fallback.
-        In production, JWT_SECRET_KEY MUST be set — we error out if missing.
-        In development, we generate an ephemeral random key and warn loudly.
-        """
-        if self.JWT_SECRET_KEY:
-            return self.JWT_SECRET_KEY
-
-        # Check for file-based secret (dev convenience)
-        secret_file = "jwt_secret.txt"
-        if os.path.exists(secret_file):
-            with open(secret_file) as f:
-                return f.read().strip()
-
-        if self.APP_ENV == "production":
-            raise RuntimeError(
-                "JWT_SECRET_KEY environment variable is not set! "
-                "This is required for production. "
-                "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
-            )
-
-        # Development: ephemeral random key (instance-isolated — warns about horizontal scaling)
-        ephemeral = secrets.token_hex(32)
-        logging.warning(
-            "JWT_SECRET_KEY not set — generating ephemeral key. "
-            "Sessions will be invalidated on restart. "
-            "NOT suitable for multi-instance or production deployment!"
-        )
-        return ephemeral
-
-    def get_csrf_secret(self) -> str:
-        """Resolve CSRF secret with same pattern as JWT secret."""
-        if self.CSRF_SECRET_KEY:
-            return self.CSRF_SECRET_KEY
-        if self.APP_ENV == "production":
-            raise RuntimeError("CSRF_SECRET_KEY environment variable is not set!")
-        return secrets.token_hex(32)
 
 
 @lru_cache

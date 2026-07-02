@@ -8,6 +8,8 @@ import { Shield, Mail, Lock, User, Eye, EyeOff, AlertCircle, UserPlus } from 'lu
 import { useMutation } from '@tanstack/react-query'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/store'
+import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
+import { auth } from '@/lib/firebase'
 
 const registerSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -38,14 +40,22 @@ export default function RegisterPage() {
   })
 
   const registerMutation = useMutation({
-    mutationFn: (data: RegisterForm) =>
-      authApi.register({ email: data.email, username: data.username, password: data.password, full_name: data.full_name }),
-    onSuccess: (res) => {
-      setUser(res.data)
+    mutationFn: async (data: RegisterForm) => {
+      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password)
+      if (data.full_name || data.username) {
+        await updateProfile(userCredential.user, {
+          displayName: data.full_name || data.username
+        })
+      }
+      const res = await authApi.me()
+      return res.data
+    },
+    onSuccess: (userData) => {
+      setUser(userData)
       navigate('/dashboard', { replace: true })
     },
     onError: (error: any) => {
-      setServerError(error?.response?.data?.detail || 'Registration failed. Please try again.')
+      setServerError(error?.message || error?.response?.data?.detail || 'Registration failed. Please try again.')
     },
   })
 

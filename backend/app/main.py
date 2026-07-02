@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.firebase import init_firebase
 from app.core.redis_client import init_redis, close_redis
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.request_id import RequestIDMiddleware
@@ -29,8 +29,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifecycle: startup → yield → shutdown."""
     log.info("Starting SQLMentor backend", environment=settings.APP_ENV)
 
-    # Initialize database
-    await init_db()
+    init_firebase()
 
     # Initialize Redis
     await init_redis()

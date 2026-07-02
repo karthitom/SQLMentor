@@ -8,6 +8,8 @@ import { Shield, Mail, Lock, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-reac
 import { useMutation } from '@tanstack/react-query'
 import { authApi } from '@/api/client'
 import { useAuthStore } from '@/store'
+import { signInWithEmailAndPassword } from 'firebase/auth'
+import { auth } from '@/lib/firebase'
 
 const loginSchema = z.object({
   email: z.string().email('Please enter a valid email address'),
@@ -27,13 +29,17 @@ export default function LoginPage() {
   })
 
   const loginMutation = useMutation({
-    mutationFn: ({ email, password }: LoginForm) => authApi.login(email, password),
-    onSuccess: (res) => {
-      setUser(res.data)
+    mutationFn: async ({ email, password }: LoginForm) => {
+      await signInWithEmailAndPassword(auth, email, password)
+      const res = await authApi.me()
+      return res.data
+    },
+    onSuccess: (userData) => {
+      setUser(userData)
       navigate('/dashboard', { replace: true })
     },
     onError: (error: any) => {
-      setServerError(error?.response?.data?.detail || 'Login failed. Please check your credentials.')
+      setServerError(error?.message || error?.response?.data?.detail || 'Login failed. Please check your credentials.')
     },
   })
 

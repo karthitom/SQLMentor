@@ -31,16 +31,5 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: false,  // No source maps in production build
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          query: ['@tanstack/react-query'],
-          charts: ['chart.js', 'react-chartjs-2'],
-          editor: ['@monaco-editor/react'],
-          flow: ['reactflow'],
-        },
-      },
-    },
   },
 })

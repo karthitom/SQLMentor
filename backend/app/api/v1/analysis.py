@@ -1,4 +1,4 @@
-"""Analysis API router."""
+"""Analysis API router using Firestore."""
 
 from datetime import datetime, timezone
 from typing import Optional
@@ -6,11 +6,9 @@ from typing import Optional
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from firebase_admin import firestore
 
-from app.api.deps import get_current_user
-from app.core.database import get_db
+from app.api.deps import get_current_user, get_db
 from app.models.analysis import Analysis, AnalysisParameter, AnalysisResponse, ResponseComparison
 from app.models.project import Project
 from app.models.user import User
@@ -26,32 +24,35 @@ log = structlog.get_logger()
 
 
 async def _check_project_ownership(
-    project_id: str, user_id: str, db: AsyncSession
+    project_id: str, user_id: str, db: firestore.firestore.Client
 ) -> Project:
-    """Verify the project exists and belongs to the current user's workspace."""
-    result = await db.execute(
-        select(Project)
-        .join(Workspace, Project.workspace_id == Workspace.id)
-        .where(Project.id == project_id, Workspace.owner_id == user_id)
-    )
-    project = result.scalar_one_or_none()
-    if not project:
+    doc = db.collection("projects").document(project_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+    project = Project(**doc.to_dict())
+    
+    ws_doc = db.collection("workspaces").document(project.workspace_id).get()
+    if not ws_doc.exists or ws_doc.to_dict().get("owner_id") != user_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return project
 
+async def _get_user_analysis(
+    analysis_id: str, user_id: str, db: firestore.firestore.Client
+) -> Analysis:
+    doc = db.collection("analyses").document(analysis_id).get()
+    if not doc.exists:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
+    analysis = Analysis(**doc.to_dict())
+    await _check_project_ownership(analysis.project_id, user_id, db)
+    return analysis
 
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_analysis(
     data: AnalysisCreateRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: firestore.firestore.Client = Depends(get_db),
 ) -> dict:
-    """
-    Create a new analysis session for a lab application.
-    ⚠️ Educational use only — target URL must be an intentionally vulnerable lab.
-    """
     project = await _check_project_ownership(data.project_id, str(current_user.id), db)
-
     analysis = Analysis(
         project_id=data.project_id,
         target_url=data.target_url,
@@ -59,10 +60,7 @@ async def create_analysis(
         description=data.description,
         status="pending",
     )
-    db.add(analysis)
-    await db.flush()
-    await db.refresh(analysis)
-
+    db.collection("analyses").document(analysis.id).set(analysis.model_dump(mode="json"))
     return {
         "id": analysis.id,
         "project_id": analysis.project_id,
@@ -72,25 +70,20 @@ async def create_analysis(
         "created_at": analysis.created_at.isoformat(),
     }
 
-
 @router.post("/{analysis_id}/discover", response_model=dict)
 async def discover_parameters(
     analysis_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: firestore.firestore.Client = Depends(get_db),
 ) -> dict:
-    """Discover input parameters in the target lab application."""
     analysis = await _get_user_analysis(analysis_id, str(current_user.id), db)
-
-    # Update status
     analysis.status = "running"
-    await db.flush()
+    db.collection("analyses").document(analysis.id).update({"status": "running"})
 
     try:
         async with AnalysisService() as svc:
             discovered = await svc.discover_parameters(analysis.target_url)
 
-        # Store discovered parameters
         for param_data in discovered.get("all_inputs", []):
             param = AnalysisParameter(
                 analysis_id=analysis.id,
@@ -98,12 +91,16 @@ async def discover_parameters(
                 location=param_data.get("location", "query"),
                 value_sample=str(param_data.get("sample_value", ""))[:1024],
             )
-            db.add(param)
+            db.collection("analysis_parameters").document(param.id).set(param.model_dump(mode="json"))
 
         analysis.parameters_count = len(discovered.get("all_inputs", []))
         analysis.status = "completed"
         analysis.completed_at = datetime.now(timezone.utc)
-        await db.flush()
+        db.collection("analyses").document(analysis.id).update({
+            "parameters_count": analysis.parameters_count,
+            "status": analysis.status,
+            "completed_at": analysis.completed_at.isoformat(),
+        })
 
         return {
             "analysis_id": analysis.id,
@@ -113,27 +110,23 @@ async def discover_parameters(
         }
 
     except ValueError as exc:
-        analysis.status = "failed"
-        analysis.error_message = str(exc)
-        await db.flush()
+        db.collection("analyses").document(analysis.id).update({
+            "status": "failed",
+            "error_message": str(exc),
+        })
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
-
 
 @router.post("/{analysis_id}/test", response_model=dict)
 async def run_test(
     analysis_id: str,
     data: RunTestRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: firestore.firestore.Client = Depends(get_db),
 ) -> dict:
-    """
-    Run an educational behavioral test by comparing baseline vs. modified responses.
-    """
     analysis = await _get_user_analysis(analysis_id, str(current_user.id), db)
 
     try:
         async with AnalysisService() as svc:
-            # Fetch baseline response
             baseline_params = {data.parameter_name: data.baseline_value}
             baseline = await svc.fetch_response(
                 url=analysis.target_url,
@@ -142,8 +135,6 @@ async def run_test(
                 data=baseline_params if data.request_method == "POST" else None,
                 label="Baseline (Normal Input)",
             )
-
-            # Fetch modified response
             modified_params = {data.parameter_name: data.test_value}
             modified = await svc.fetch_response(
                 url=analysis.target_url,
@@ -153,7 +144,6 @@ async def run_test(
                 label="Modified Input",
             )
 
-        # Store responses
         baseline_response = AnalysisResponse(
             analysis_id=analysis.id,
             request_url=analysis.target_url,
@@ -180,15 +170,12 @@ async def run_test(
             response_type="test",
             label=modified["label"],
         )
-        db.add(baseline_response)
-        db.add(modified_response)
-        await db.flush()
+        db.collection("analysis_responses").document(baseline_response.id).set(baseline_response.model_dump(mode="json"))
+        db.collection("analysis_responses").document(modified_response.id).set(modified_response.model_dump(mode="json"))
 
-        # Compute comparison
         comparison_svc = ComparisonService()
         comparison_result = comparison_svc.compare(baseline, modified)
 
-        # AI explanation
         ai_svc = AIService()
         ai_explanation = await ai_svc.explain_comparison(
             baseline=baseline,
@@ -196,7 +183,6 @@ async def run_test(
             similarity_score=comparison_result["similarity_score"],
         )
 
-        # Store comparison
         comparison = ResponseComparison(
             analysis_id=analysis.id,
             baseline_response_id=baseline_response.id,
@@ -205,16 +191,16 @@ async def run_test(
             size_difference=comparison_result["size_difference"],
             time_difference_ms=comparison_result["time_difference_ms"],
             status_changed=comparison_result["status_changed"],
-            diff_data={"blocks": comparison_result["diff_blocks"][:50]},  # Limit stored diff
+            diff_data={"blocks": comparison_result["diff_blocks"][:50]},
             observable_changes=comparison_result["observable_changes"],
             ai_analysis=ai_explanation,
         )
-        db.add(comparison)
+        db.collection("response_comparisons").document(comparison.id).set(comparison.model_dump(mode="json"))
 
-        # Update analysis with AI explanation
-        analysis.ai_explanation = ai_explanation
-        analysis.ai_model_used = ai_svc._get_model()
-        await db.flush()
+        db.collection("analyses").document(analysis.id).update({
+            "ai_explanation": ai_explanation,
+            "ai_model_used": ai_svc._get_model(),
+        })
 
         return {
             "comparison_id": comparison.id,
@@ -247,16 +233,13 @@ async def run_test(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
 
-
 @router.get("/{analysis_id}", response_model=dict)
 async def get_analysis(
     analysis_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: firestore.firestore.Client = Depends(get_db),
 ) -> dict:
-    """Get analysis details with ownership check."""
     analysis = await _get_user_analysis(analysis_id, str(current_user.id), db)
-
     return {
         "id": analysis.id,
         "project_id": analysis.project_id,
@@ -272,19 +255,3 @@ async def get_analysis(
         "created_at": analysis.created_at.isoformat(),
         "completed_at": analysis.completed_at.isoformat() if analysis.completed_at else None,
     }
-
-
-async def _get_user_analysis(
-    analysis_id: str, user_id: str, db: AsyncSession
-) -> Analysis:
-    """Fetch analysis with ownership validation."""
-    result = await db.execute(
-        select(Analysis)
-        .join(Project, Analysis.project_id == Project.id)
-        .join(Workspace, Project.workspace_id == Workspace.id)
-        .where(Analysis.id == analysis_id, Workspace.owner_id == user_id)
-    )
-    analysis = result.scalar_one_or_none()
-    if not analysis:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Analysis not found")
-    return analysis

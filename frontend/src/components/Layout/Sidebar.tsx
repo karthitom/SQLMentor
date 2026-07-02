@@ -6,8 +6,9 @@ import {
   ChevronRight, Zap, Users, Activity,
 } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
-import { authApi } from '@/api/client'
 import { useMutation } from '@tanstack/react-query'
+import { signOut } from 'firebase/auth'
+import { auth } from '@/lib/firebase'
 
 const navSections = [
   {
@@ -47,7 +48,7 @@ export function Sidebar() {
   const { sidebarOpen } = useUIStore()
 
   const logoutMutation = useMutation({
-    mutationFn: () => authApi.logout(),
+    mutationFn: () => signOut(auth),
     onSettled: () => {
       logout() // Clears all state + redirects to /login
     },

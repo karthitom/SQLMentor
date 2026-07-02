@@ -32,44 +32,46 @@ SQLMentor is a production-quality educational cybersecurity platform that helps 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | React 18, TypeScript, Vite, Tailwind CSS, Framer Motion |
-| Backend | Python 3.12, FastAPI, SQLAlchemy, Alembic |
-| Database | PostgreSQL 16 (SQLite for local dev) |
-| Cache | Redis 7 |
-| AI | OpenAI-compatible API / Ollama (offline) |
-| Auth | JWT (HttpOnly cookies) + CSRF + Argon2 |
-| Deploy | Docker Compose, Nginx |
+| Backend | Python 3.12, FastAPI, Pydantic |
+| Database | Firebase Firestore (NoSQL) |
+| Storage | Firebase Storage |
+| AI | OpenAI-compatible API |
+| Auth | Firebase Authentication |
+| Deploy | Firebase Hosting (Frontend), Render (Backend) |
 
 ---
 
 ## Quick Start
 
 ### Prerequisites
-- Docker & Docker Compose
-- Git
+- Node.js & npm
+- Python 3.11+
+- Firebase Project (Authentication, Firestore, Storage)
+- Render Account (for backend)
 
 ### 1. Clone & Configure
 ```bash
 git clone https://github.com/yourorg/sqlmentor.git
 cd sqlmentor
-cp .env.example .env
-# Edit .env and add your OpenAI API key and generate secrets
 ```
 
-### 2. Start the Stack
+Create `.env.development` and `.env.production` in both frontend and backend directories.
+
+### 2. Start Frontend
 ```bash
-docker-compose up --build
+cd frontend
+npm install
+npm run dev
 ```
 
-### 3. Access
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost:3000 |
-| Backend API | http://localhost:8000 |
-| API Docs | http://localhost:8000/docs |
-| Admin | http://localhost:3000/admin |
-
-### Default Admin Account
-Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` in `.env` before first run.
+### 3. Start Backend
+```bash
+cd backend
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
 
 ---
 

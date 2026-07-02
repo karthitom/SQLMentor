@@ -40,10 +40,10 @@ export const useAuthStore = create<AuthState>()(
 
       setLoading: (isLoading) => set({ isLoading }),
 
-      logout: () => {
-        // Clear ALL client-side state on logout
+      logout: async () => {
+        const { auth } = await import('@/lib/firebase');
+        await auth.signOut();
         set({ user: null, isAuthenticated: false, isLoading: false })
-        // Full page redirect to clear any cached state
         window.location.href = '/login'
       },
     }),
