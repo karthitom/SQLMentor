@@ -24,9 +24,14 @@ def init_firebase() -> None:
 
     try:
         if settings.FIREBASE_SERVICE_ACCOUNT_BASE64:
-            # Decode the base64 encoded JSON service account key
-            decoded = base64.b64decode(settings.FIREBASE_SERVICE_ACCOUNT_BASE64).decode("utf-8")
-            cert_dict = json.loads(decoded)
+            try:
+                # Decode the base64 encoded JSON service account key
+                decoded = base64.b64decode(settings.FIREBASE_SERVICE_ACCOUNT_BASE64).decode("utf-8")
+                cert_dict = json.loads(decoded)
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as e:
+                log.error("Failed to decode FIREBASE_SERVICE_ACCOUNT_BASE64. Ensure it is a valid base64-encoded JSON string.", error=str(e))
+                raise ValueError("Invalid FIREBASE_SERVICE_ACCOUNT_BASE64 environment variable.") from e
+            
             cred = credentials.Certificate(cert_dict)
             _firebase_app = firebase_admin.initialize_app(cred, {
                 'storageBucket': settings.FIREBASE_STORAGE_BUCKET
