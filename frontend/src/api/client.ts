@@ -48,6 +48,9 @@ export const workspacesApi = {
 }
 
 export const projectsApi = {
+  list: (workspaceId: string) =>
+    apiClient.get('/projects', { params: { workspace_id: workspaceId } }),
+
   create: (data: {
     workspace_id: string
     name: string

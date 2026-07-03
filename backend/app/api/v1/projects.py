@@ -49,6 +49,36 @@ async def _get_project_for_user(project_id: str, user_id: str, db: firestore.fir
     await _get_workspace_for_user(project.workspace_id, user_id, db)
     return project
 
+@router.get("", response_model=list)
+async def list_projects(
+    workspace_id: str,
+    current_user: User = Depends(get_current_user),
+    db: firestore.firestore.Client = Depends(get_db),
+) -> list:
+    """List all projects in a workspace owned by the current user."""
+    await _get_workspace_for_user(workspace_id, str(current_user.id), db)
+    docs = (
+        db.collection("projects")
+        .where("workspace_id", "==", workspace_id)
+        .stream()
+    )
+    results = []
+    for doc in docs:
+        data = doc.to_dict()
+        results.append({
+            "id": data.get("id"),
+            "workspace_id": data.get("workspace_id"),
+            "name": data.get("name"),
+            "description": data.get("description"),
+            "lab_url": data.get("lab_url"),
+            "status": data.get("status"),
+            "difficulty_level": data.get("difficulty_level"),
+            "is_pinned": data.get("is_pinned"),
+            "created_at": data.get("created_at"),
+        })
+    return results
+
+
 @router.post("", response_model=dict, status_code=status.HTTP_201_CREATED)
 async def create_project(
     data: ProjectCreate,

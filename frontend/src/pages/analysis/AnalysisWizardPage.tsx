@@ -1,15 +1,15 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   Link2, Search, Play, BarChart3, MessageSquare,
   ChevronRight, AlertCircle, CheckCircle, Loader,
   ArrowRight, ExternalLink, Eye,
 } from 'lucide-react'
-import { analysisApi } from '@/api/client'
+import { analysisApi, workspacesApi, projectsApi } from '@/api/client'
 import { useToast } from '@/components/UI/Toast'
 
 const WIZARD_STEPS = [
@@ -51,12 +51,33 @@ interface AnalysisState {
 export default function AnalysisWizardPage() {
   const toast = useToast()
   const [currentStep, setCurrentStep] = useState(1)
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('')
   const [state, setState] = useState<AnalysisState>({
     analysisId: null, parameters: [], comparison: null, aiExplanation: null,
   })
 
   const step1Form = useForm<Step1Form>({ resolver: zodResolver(step1Schema) })
   const step3Form = useForm<Step3Form>({ resolver: zodResolver(step3Schema), defaultValues: { request_method: 'GET', parameter_location: 'query' } })
+
+  // Fetch workspaces for the selector
+  const { data: workspacesData, isLoading: workspacesLoading } = useQuery({
+    queryKey: ['workspaces'],
+    queryFn: () => workspacesApi.list(),
+  })
+  const workspaces: any[] = workspacesData?.data || []
+
+  // Fetch projects when a workspace is selected
+  const { data: projectsData, isLoading: projectsLoading } = useQuery({
+    queryKey: ['projects', selectedWorkspaceId],
+    queryFn: () => projectsApi.list(selectedWorkspaceId),
+    enabled: !!selectedWorkspaceId,
+  })
+  const projects: any[] = projectsData?.data || []
+
+  // Clear selected project when workspace changes
+  useEffect(() => {
+    step1Form.setValue('project_id', '')
+  }, [selectedWorkspaceId])
 
   // Step 1: Create analysis
   const createMutation = useMutation({
@@ -145,13 +166,56 @@ export default function AnalysisWizardPage() {
 
               <form onSubmit={step1Form.handleSubmit((data) => createMutation.mutate(data))}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                  {/* Project ID (simplified for demo) */}
+                  {/* Workspace selector */}
+                  <div>
+                    <label htmlFor="wizard-workspace" style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
+                      Workspace <span style={{ color: 'var(--color-danger)' }}>*</span>
+                    </label>
+                    <select
+                      id="wizard-workspace"
+                      className="input"
+                      value={selectedWorkspaceId}
+                      onChange={(e) => setSelectedWorkspaceId(e.target.value)}
+                      disabled={workspacesLoading}
+                    >
+                      <option value="">
+                        {workspacesLoading ? 'Loading workspaces...' : '— Select a workspace —'}
+                      </option>
+                      {workspaces.map((ws: any) => (
+                        <option key={ws.id} value={ws.id}>{ws.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Project selector */}
                   <div>
                     <label htmlFor="wizard-project" style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
-                      Project ID <span style={{ color: 'var(--color-danger)' }}>*</span>
+                      Project <span style={{ color: 'var(--color-danger)' }}>*</span>
                     </label>
-                    <input id="wizard-project" className={`input ${step1Form.formState.errors.project_id ? 'error' : ''}`} placeholder="Enter project ID" {...step1Form.register('project_id')} />
-                    {step1Form.formState.errors.project_id && <p style={{ color: 'var(--color-danger)', fontSize: '0.8125rem', marginTop: '0.25rem' }}>{step1Form.formState.errors.project_id.message}</p>}
+                    <select
+                      id="wizard-project"
+                      className={`input ${step1Form.formState.errors.project_id ? 'error' : ''}`}
+                      disabled={!selectedWorkspaceId || projectsLoading}
+                      {...step1Form.register('project_id')}
+                    >
+                      <option value="">
+                        {!selectedWorkspaceId
+                          ? '— Select a workspace first —'
+                          : projectsLoading
+                          ? 'Loading projects...'
+                          : projects.length === 0
+                          ? 'No projects in this workspace'
+                          : '— Select a project —'}
+                      </option>
+                      {projects.map((p: any) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                    {step1Form.formState.errors.project_id && (
+                      <p style={{ color: 'var(--color-danger)', fontSize: '0.8125rem', marginTop: '0.25rem' }}>
+                        {step1Form.formState.errors.project_id.message}
+                      </p>
+                    )}
                   </div>
 
                   {/* Target URL */}
