@@ -35,12 +35,12 @@ async def list_workspaces(
     include_archived: bool = False,
 ) -> list[dict]:
     """List all workspaces for the current user."""
-    query = db.collection("workspaces").where("owner_id", "==", current_user.id)
-    if not include_archived:
-        query = query.where("is_archived", "==", False)
-    
-    docs = query.stream()
+    # Use a single-field query to avoid requiring a composite Firestore index.
+    # Filter is_archived in Python after fetching.
+    docs = db.collection("workspaces").where("owner_id", "==", current_user.id).stream()
     workspaces = [Workspace(**doc.to_dict()) for doc in docs]
+    if not include_archived:
+        workspaces = [w for w in workspaces if not w.is_archived]
     workspaces.sort(key=lambda w: (w.is_pinned, w.updated_at.isoformat()), reverse=True)
 
     return [
