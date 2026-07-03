@@ -3,11 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Link2, Search, Play, BarChart3, MessageSquare,
-  ChevronRight, AlertCircle, CheckCircle, Loader,
-  ArrowRight, ExternalLink, Eye,
+  Link2, Search, Play, MessageSquare,
+  ChevronRight, AlertCircle, CheckCircle,
+  Plus, FolderPlus, X,
 } from 'lucide-react'
 import { analysisApi, workspacesApi, projectsApi } from '@/api/client'
 import { useToast } from '@/components/UI/Toast'
@@ -50,8 +50,11 @@ interface AnalysisState {
 
 export default function AnalysisWizardPage() {
   const toast = useToast()
+  const queryClient = useQueryClient()
   const [currentStep, setCurrentStep] = useState(1)
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState('')
+  const [showCreateProject, setShowCreateProject] = useState(false)
+  const [newProjectName, setNewProjectName] = useState('')
   const [state, setState] = useState<AnalysisState>({
     analysisId: null, parameters: [], comparison: null, aiExplanation: null,
   })
@@ -74,10 +77,26 @@ export default function AnalysisWizardPage() {
   })
   const projects: any[] = projectsData?.data || []
 
-  // Clear selected project when workspace changes
+  // Clear selected project + hide create form when workspace changes
   useEffect(() => {
     step1Form.setValue('project_id', '')
+    setShowCreateProject(false)
+    setNewProjectName('')
   }, [selectedWorkspaceId])
+
+  // Inline project creation
+  const createProjectMutation = useMutation({
+    mutationFn: (name: string) =>
+      projectsApi.create({ workspace_id: selectedWorkspaceId, name }),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['projects', selectedWorkspaceId] })
+      step1Form.setValue('project_id', res.data.id)
+      setShowCreateProject(false)
+      setNewProjectName('')
+      toast.success(`Project "${res.data.name}" created`)
+    },
+    onError: () => toast.error('Failed to create project'),
+  })
 
   // Step 1: Create analysis
   const createMutation = useMutation({
@@ -189,9 +208,51 @@ export default function AnalysisWizardPage() {
 
                   {/* Project selector */}
                   <div>
-                    <label htmlFor="wizard-project" style={{ display: 'block', fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: '0.375rem' }}>
-                      Project <span style={{ color: 'var(--color-danger)' }}>*</span>
-                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem' }}>
+                      <label htmlFor="wizard-project" style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-secondary)' }}>
+                        Project <span style={{ color: 'var(--color-danger)' }}>*</span>
+                      </label>
+                      {selectedWorkspaceId && !projectsLoading && (
+                        <button
+                          type="button"
+                          onClick={() => setShowCreateProject((v) => !v)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary-400)', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '0.25rem', padding: 0 }}
+                        >
+                          {showCreateProject ? <><X size={13} /> Cancel</> : <><Plus size={13} /> New project</>}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Inline create-project form */}
+                    {showCreateProject && (
+                      <div style={{ background: 'var(--surface-2)', border: '1px solid var(--color-primary-800)', borderRadius: 'var(--radius-md)', padding: '0.875rem', marginBottom: '0.625rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <FolderPlus size={15} color="var(--color-primary-400)" style={{ flexShrink: 0 }} />
+                        <input
+                          autoFocus
+                          className="input"
+                          style={{ flex: 1, padding: '0.375rem 0.625rem', fontSize: '0.875rem' }}
+                          placeholder="Project name (e.g. DVWA Study)"
+                          value={newProjectName}
+                          onChange={(e) => setNewProjectName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              if (newProjectName.trim()) createProjectMutation.mutate(newProjectName.trim())
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-primary"
+                          style={{ padding: '0.375rem 0.75rem', fontSize: '0.8125rem', whiteSpace: 'nowrap' }}
+                          disabled={!newProjectName.trim() || createProjectMutation.isPending}
+                          onClick={() => createProjectMutation.mutate(newProjectName.trim())}
+                        >
+                          {createProjectMutation.isPending ? 'Creating...' : 'Create'}
+                        </button>
+                      </div>
+                    )}
+
                     <select
                       id="wizard-project"
                       className={`input ${step1Form.formState.errors.project_id ? 'error' : ''}`}
@@ -204,7 +265,7 @@ export default function AnalysisWizardPage() {
                           : projectsLoading
                           ? 'Loading projects...'
                           : projects.length === 0
-                          ? 'No projects in this workspace'
+                          ? '— No projects yet, create one above —'
                           : '— Select a project —'}
                       </option>
                       {projects.map((p: any) => (
@@ -273,8 +334,35 @@ export default function AnalysisWizardPage() {
                   <p style={{ color: 'var(--text-muted)' }}>Inspecting lab application inputs...</p>
                 </div>
               ) : state.parameters.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
-                  <p>No parameters discovered. The lab may require authentication or a different URL.</p>
+                <div>
+                  {/* No-params explanation card */}
+                  <div style={{ background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 'var(--radius-md)', padding: '1.25rem', marginBottom: '1.25rem' }}>
+                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                      <AlertCircle size={18} color="#f59e0b" style={{ flexShrink: 0, marginTop: 2 }} />
+                      <div>
+                        <p style={{ fontWeight: 600, color: '#fbbf24', marginBottom: '0.5rem', fontSize: '0.9375rem' }}>No parameters auto-discovered</p>
+                        <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: '0.75rem' }}>
+                          This is common for pages that:
+                        </p>
+                        <ul style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', lineHeight: 1.7, paddingLeft: '1.25rem', margin: 0 }}>
+                          <li>Require authentication before showing forms (e.g. PortSwigger labs)</li>
+                          <li>Load content dynamically via JavaScript</li>
+                          <li>Pass parameters in the URL path rather than query strings</li>
+                          <li>Use a non-standard content type (JSON API, GraphQL)</li>
+                        </ul>
+                        <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.75rem' }}>
+                          💡 You can still run a test by specifying the parameter name and location manually in the next step.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '0.875rem' }}>
+                    <button className="btn btn-secondary" onClick={() => setCurrentStep(1)}>Back</button>
+                    <button className="btn btn-primary" onClick={() => setCurrentStep(3)} id="wizard-step2-manual">
+                      Proceed to Manual Test <ChevronRight size={16} />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
