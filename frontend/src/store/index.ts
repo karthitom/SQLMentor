@@ -22,34 +22,39 @@ interface AuthState {
   user: User | null
   isAuthenticated: boolean
   isLoading: boolean
+  authReady: boolean  // true once Firebase onAuthStateChanged has fired
   setUser: (user: User | null) => void
   setLoading: (loading: boolean) => void
+  setAuthReady: (ready: boolean) => void
   logout: () => void
 }
 
-// Auth store — user data only (tokens in HttpOnly cookies, not stored here)
+// Auth store — user data only (Firebase manages the actual token)
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
       isAuthenticated: false,
       isLoading: true,
+      authReady: false,
 
       setUser: (user) =>
         set({ user, isAuthenticated: !!user, isLoading: false }),
 
       setLoading: (isLoading) => set({ isLoading }),
 
+      setAuthReady: (authReady) => set({ authReady }),
+
       logout: async () => {
         const { auth } = await import('@/lib/firebase');
         await auth.signOut();
-        set({ user: null, isAuthenticated: false, isLoading: false })
+        set({ user: null, isAuthenticated: false, isLoading: false, authReady: false })
         window.location.href = '/login'
       },
     }),
     {
       name: 'sqlmentor-auth',
-      storage: createJSONStorage(() => sessionStorage), // sessionStorage, not localStorage
+      storage: createJSONStorage(() => localStorage), // localStorage survives refresh
       partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
     }
   )

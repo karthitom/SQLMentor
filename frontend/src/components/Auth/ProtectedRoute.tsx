@@ -1,8 +1,5 @@
-import { useEffect } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store'
-import { useQuery } from '@tanstack/react-query'
-import { authApi } from '@/api/client'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -10,30 +7,13 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  const { user, isAuthenticated, setUser, setLoading, isLoading } = useAuthStore()
+  const { user, isAuthenticated, authReady } = useAuthStore()
   const location = useLocation()
 
-  // Validate session on every protected route visit
-  const { data, isError, isPending } = useQuery({
-    queryKey: ['auth', 'me'],
-    queryFn: async () => {
-      const res = await authApi.me()
-      return res.data
-    },
-    retry: false,
-    staleTime: 2 * 60 * 1000, // 2 minutes
-  })
-
-  useEffect(() => {
-    if (data) {
-      setUser(data)
-    } else if (isError) {
-      setUser(null)
-      setLoading(false)
-    }
-  }, [data, isError, setUser, setLoading])
-
-  if (isPending) {
+  // Wait for Firebase onAuthStateChanged to fire before making any decision.
+  // Without this, the component renders with isAuthenticated=false on refresh
+  // (before Firebase has had time to restore its persisted session).
+  if (!authReady) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--surface-0)' }}>
         <div style={{ textAlign: 'center' }}>
@@ -44,16 +24,16 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     )
   }
 
-  if (isError || !data) {
+  if (!isAuthenticated || !user) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
   // Role-based access control
-  if (requiredRole && data.role !== requiredRole) {
-    if (requiredRole === 'admin' && data.role !== 'admin') {
+  if (requiredRole) {
+    if (requiredRole === 'admin' && user.role !== 'admin') {
       return <Navigate to="/dashboard" replace />
     }
-    if (requiredRole === 'instructor' && data.role === 'student') {
+    if (requiredRole === 'instructor' && user.role === 'student') {
       return <Navigate to="/dashboard" replace />
     }
   }
