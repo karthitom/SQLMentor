@@ -28,7 +28,10 @@ class KnowledgeArticle(BaseModel):
     slug: str
     title: str
     summary: Optional[str] = None
-    content_markdown: str
+    content_markdown: str # Legacy, moving to modules
+    modules: Optional[List[Dict[str, Any]]] = None # Sequence of Interactive Modules
+    xp_reward: int = 100
+    prerequisites: List[str] = Field(default_factory=list)
     category: str
     tags: Optional[List[Any]] = None
     difficulty_level: Optional[str] = None

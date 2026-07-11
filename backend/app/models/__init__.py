@@ -1,17 +1,19 @@
 """Models package — Pydantic models for Firestore documents."""
 
 from app.models.user import User, UserSession
-from app.models.workspace import Workspace, WorkspaceTag
-from app.models.project import Project, ProjectBookmark
-from app.models.analysis import Analysis, AnalysisParameter, AnalysisResponse, ResponseComparison
 from app.models.report import Report, ReportExport
-from app.models.knowledge import KnowledgeArticle, Quiz, QuizQuestion, UserProgress
+from app.models.knowledge import KnowledgeArticle, Quiz, QuizQuestion
+from app.models.learning_path import LearningPath, Module
+from app.models.lab import Lab, LabTask
+from app.models.progress import UserProgress
+from app.models.achievement import Achievement, UserAchievement
 
 __all__ = [
     "User", "UserSession",
-    "Workspace", "WorkspaceTag",
-    "Project", "ProjectBookmark",
-    "Analysis", "AnalysisParameter", "AnalysisResponse", "ResponseComparison",
     "Report", "ReportExport",
-    "KnowledgeArticle", "Quiz", "QuizQuestion", "UserProgress",
+    "KnowledgeArticle", "Quiz", "QuizQuestion",
+    "LearningPath", "Module",
+    "Lab", "LabTask",
+    "UserProgress",
+    "Achievement", "UserAchievement",
 ]

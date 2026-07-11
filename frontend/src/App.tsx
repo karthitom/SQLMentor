@@ -7,13 +7,17 @@ import { AppShell } from '@/components/Layout/AppShell'
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'))
 const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'))
 const DashboardPage = lazy(() => import('@/pages/dashboard/DashboardPage'))
-const AnalysisWizardPage = lazy(() => import('@/pages/analysis/AnalysisWizardPage'))
 const KnowledgeBasePage = lazy(() => import('@/pages/knowledge/KnowledgeBasePage'))
 const ArticleDetailPage = lazy(() => import('@/pages/knowledge/ArticleDetailPage'))
-const WorkspacesPage = lazy(() => import('@/pages/workspaces/WorkspacesPage'))
-const WorkspaceDetailPage = lazy(() => import('@/pages/workspaces/WorkspaceDetailPage'))
-const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'))
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'))
+
+// New Educational Pages
+const LearningPathsPage = lazy(() => import('@/pages/learning/LearningPathsPage'))
+const PathDetailPage = lazy(() => import('@/pages/learning/PathDetailPage'))
+const LabEnvironmentPage = lazy(() => import('@/pages/labs/LabEnvironmentPage'))
+const SQLPlaygroundPage = lazy(() => import('@/pages/playground/SQLPlaygroundPage'))
+const LeaderboardPage = lazy(() => import('@/pages/leaderboard/LeaderboardPage'))
+const UserProfilePage = lazy(() => import('@/pages/profile/UserProfilePage'))
 
 function PageFallback() {
   return (
@@ -50,13 +54,18 @@ export default function App() {
 
         {/* Protected routes with AppShell */}
         <Route path="/dashboard" element={<ProtectedLayout><DashboardPage /></ProtectedLayout>} />
-        <Route path="/workspaces" element={<ProtectedLayout><WorkspacesPage /></ProtectedLayout>} />
-        <Route path="/workspaces/:id" element={<ProtectedLayout><WorkspaceDetailPage /></ProtectedLayout>} />
-        <Route path="/analysis/new" element={<ProtectedLayout><AnalysisWizardPage /></ProtectedLayout>} />
-        <Route path="/analysis" element={<ProtectedLayout><AnalysisWizardPage /></ProtectedLayout>} />
+        
+        {/* Educational Routes */}
+        <Route path="/paths" element={<ProtectedLayout><LearningPathsPage /></ProtectedLayout>} />
+        <Route path="/paths/:id" element={<ProtectedLayout><PathDetailPage /></ProtectedLayout>} />
+        <Route path="/labs/:id" element={<ProtectedLayout><LabEnvironmentPage /></ProtectedLayout>} />
+        <Route path="/playground" element={<ProtectedLayout><SQLPlaygroundPage /></ProtectedLayout>} />
+        <Route path="/leaderboard" element={<ProtectedLayout><LeaderboardPage /></ProtectedLayout>} />
+        <Route path="/profile" element={<ProtectedLayout><UserProfilePage /></ProtectedLayout>} />
+        
+        {/* Knowledge Base */}
         <Route path="/knowledge" element={<ProtectedLayout><KnowledgeBasePage /></ProtectedLayout>} />
         <Route path="/knowledge/:slug" element={<ProtectedLayout><ArticleDetailPage /></ProtectedLayout>} />
-        <Route path="/reports" element={<ProtectedLayout><ReportsPage /></ProtectedLayout>} />
         <Route path="/settings" element={<ProtectedLayout><SettingsPage /></ProtectedLayout>} />
 
         {/* Default redirect */}

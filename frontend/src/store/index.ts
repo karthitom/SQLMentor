@@ -12,8 +12,10 @@ export interface User {
   role: 'student' | 'instructor' | 'admin'
   is_active: boolean
   learning_streak_days: number
-  total_analyses: number
-  total_reports: number
+  xp: number
+  level: number
+  badges: string[]
+  completed_modules: string[]
   created_at: string
   last_login_at: string | null
 }

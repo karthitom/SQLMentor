@@ -89,3 +89,33 @@ async def explain_concept(
             "Only test against systems you own or have explicit written authorization to test."
         ),
     }
+
+class GenerateContentRequest(BaseModel):
+    topic: str
+    content_type: str = Field(..., pattern=r"^(quiz|notes|interview)$")
+
+@router.post("/generate")
+async def generate_content(
+    request: GenerateContentRequest,
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    """Generate dynamic educational content based on the user's progress."""
+    ai_svc = AIService()
+
+    prompts = {
+        "quiz": f"Generate a short 3-question multiple choice quiz about {request.topic} for a cybersecurity student. Include the answers and explanations.",
+        "notes": f"Generate concise, bullet-point revision notes summarizing the key concepts, vulnerabilities, and mitigations for {request.topic}.",
+        "interview": f"Generate 3 realistic technical interview questions related to {request.topic} along with their ideal answers."
+    }
+
+    prompt = prompts.get(request.content_type, prompts["notes"])
+
+    reply = await ai_svc.chat(
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    return {
+        "topic": request.topic,
+        "content_type": request.content_type,
+        "content": reply
+    }

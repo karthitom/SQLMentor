@@ -1,9 +1,10 @@
+import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
-  LayoutDashboard, FolderOpen, FlaskConical, BookOpen,
-  BarChart3, FileText, Settings, Shield, LogOut,
-  ChevronRight, Zap, Users, Activity,
+  LayoutDashboard, BookOpen, FlaskConical, Database,
+  Bot, HelpCircle, Award, FileBadge, Activity,
+  User, Settings, Shield, LogOut, ChevronDown, ChevronRight
 } from 'lucide-react'
 import { useAuthStore, useUIStore } from '@/store'
 import { useMutation } from '@tanstack/react-query'
@@ -12,45 +13,124 @@ import { auth } from '@/lib/firebase'
 
 const navSections = [
   {
-    label: 'Main',
+    label: 'Platform',
     items: [
       { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-      { path: '/workspaces', icon: FolderOpen, label: 'Workspaces' },
     ],
   },
   {
-    label: 'Learning',
+    label: 'Academy',
     items: [
-      { path: '/analysis', icon: FlaskConical, label: 'Analysis Wizard' },
-      { path: '/knowledge', icon: BookOpen, label: 'Knowledge Base' },
-      { path: '/learning', icon: Activity, label: 'My Progress' },
+      { 
+        path: '/paths', icon: BookOpen, label: 'Learning Paths',
+        subItems: [
+          { path: '/paths/sql-basics', label: 'SQL Basics' },
+          { path: '/paths/db-fundamentals', label: 'Database Fundamentals' },
+          { path: '/knowledge/sql-injection-fundamentals', label: 'SQL Injection Fundamentals' },
+          { path: '/paths/error-based', label: 'Error-Based Concepts' },
+          { path: '/paths/union-based', label: 'UNION Concepts' },
+          { path: '/paths/boolean-based', label: 'Boolean-Based Concepts' },
+          { path: '/paths/blind-sql', label: 'Blind SQL Concepts' },
+          { path: '/paths/time-based', label: 'Time-Based Concepts' },
+          { path: '/paths/secure-coding', label: 'Secure Coding' },
+        ]
+      },
+      { 
+        path: '/labs', icon: FlaskConical, label: 'Interactive Labs',
+        subItems: [
+          { path: '/labs/beginner', label: 'Beginner Labs' },
+          { path: '/labs/intermediate', label: 'Intermediate Labs' },
+          { path: '/labs/advanced', label: 'Advanced Labs' },
+          { path: '/labs/challenges', label: 'Challenge Labs' },
+        ]
+      },
+      { path: '/playground', icon: Database, label: 'SQL Playground' },
+      { path: '/visualizer', icon: Database, label: 'Database Visualizer' },
+      { path: '/mentor', icon: Bot, label: 'AI Mentor' },
+      { path: '/quizzes', icon: HelpCircle, label: 'Quizzes' },
     ],
   },
   {
-    label: 'Output',
+    label: 'Progression',
     items: [
-      { path: '/reports', icon: FileText, label: 'Reports' },
-      { path: '/analytics', icon: BarChart3, label: 'Analytics' },
+      { path: '/achievements', icon: Award, label: 'Achievements' },
+      { path: '/certificates', icon: FileBadge, label: 'Certificates' },
+      { path: '/leaderboard', icon: Activity, label: 'My Progress' },
     ],
   },
   {
     label: 'Account',
     items: [
+      { path: '/profile', icon: User, label: 'Profile' },
       { path: '/settings', icon: Settings, label: 'Settings' },
     ],
   },
 ]
 
+function NavItem({ item, isActive, currentPath }: { item: any, isActive: (p: string) => boolean, currentPath: string }) {
+  const [isOpen, setIsOpen] = useState(isActive(item.path))
+  const isItemActive = isActive(item.path)
+  const hasSubItems = item.subItems && item.subItems.length > 0
+
+  return (
+    <div className="mb-1">
+      {hasSubItems ? (
+        <div 
+          className={`nav-item cursor-pointer ${isItemActive ? 'active font-medium' : ''}`}
+          onClick={() => setIsOpen(!isOpen)}
+        >
+          <div className="flex items-center gap-3">
+            <item.icon size={17} />
+            <span>{item.label}</span>
+          </div>
+          {isOpen ? <ChevronDown size={14} className="opacity-50" /> : <ChevronRight size={14} className="opacity-50" />}
+        </div>
+      ) : (
+        <Link to={item.path} className={`nav-item ${isItemActive ? 'active font-medium' : ''}`}>
+          <div className="flex items-center gap-3">
+            <item.icon size={17} />
+            <span>{item.label}</span>
+          </div>
+        </Link>
+      )}
+
+      {/* Sub Items */}
+      <AnimatePresence>
+        {hasSubItems && isOpen && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden ml-[22px] border-l-2 border-[var(--surface-3)] mt-1 mb-2 space-y-1"
+          >
+            {item.subItems.map((subItem: any) => (
+              <Link 
+                key={subItem.path} 
+                to={subItem.path}
+                className={`block py-1.5 pl-4 pr-3 text-sm rounded-r-md transition-colors ${
+                  currentPath === subItem.path 
+                    ? 'text-[var(--color-primary-400)] font-medium bg-[var(--surface-2)] border-l-2 -ml-[2px] border-[var(--color-primary-500)]' 
+                    : 'text-[var(--text-muted)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-2)]'
+                }`}
+              >
+                {subItem.label}
+              </Link>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 export function Sidebar() {
   const location = useLocation()
-  const navigate = useNavigate()
   const { user, logout } = useAuthStore()
-  const { sidebarOpen } = useUIStore()
 
   const logoutMutation = useMutation({
     mutationFn: () => signOut(auth),
     onSettled: () => {
-      logout() // Clears all state + redirects to /login
+      logout() 
     },
   })
 
@@ -59,99 +139,58 @@ export function Sidebar() {
 
   return (
     <motion.aside
-      className="sidebar"
+      className="sidebar flex flex-col h-full bg-[var(--surface-1)] border-r border-[var(--surface-3)]"
       initial={{ x: -20, opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       transition={{ duration: 0.3 }}
     >
       {/* Logo */}
-      <div className="sidebar-logo">
-        <div style={{
-          width: 36, height: 36, borderRadius: 10,
-          background: 'linear-gradient(135deg, var(--color-primary-600), var(--color-accent-600))',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <Shield size={20} color="white" />
+      <div className="sidebar-logo p-5 border-b border-[var(--surface-3)] flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[var(--color-primary-600)] to-[var(--color-accent-600)] flex items-center justify-center shadow-lg shadow-[var(--color-primary-900)]">
+          <Shield size={20} className="text-white" />
         </div>
         <div>
-          <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-primary)' }}>
-            SQLMentor
+          <div className="font-extrabold text-[1.05rem] text-[var(--text-primary)] tracking-tight">
+            SQLMentor Labs
           </div>
-          <div style={{ fontSize: '0.6875rem', color: 'var(--text-muted)', fontWeight: 500 }}>
-            Security Learning Platform
+          <div className="text-[0.65rem] text-[var(--color-primary-400)] font-semibold uppercase tracking-wider">
+            Cybersecurity Academy
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
         {navSections.map((section) => (
           <div key={section.label}>
-            <div className="nav-section-label">{section.label}</div>
+            <div className="text-[0.7rem] font-bold text-[var(--text-disabled)] uppercase tracking-wider mb-2 ml-2">{section.label}</div>
             {section.items.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
-              >
-                <item.icon size={17} />
-                <span>{item.label}</span>
-              </Link>
+              <NavItem key={item.path} item={item} isActive={isActive} currentPath={location.pathname} />
             ))}
           </div>
         ))}
-
-        {/* Admin link — only for admins */}
-        {user?.role === 'admin' && (
-          <div>
-            <div className="nav-section-label">Administration</div>
-            <Link to="/admin" className={`nav-item ${isActive('/admin') ? 'active' : ''}`}>
-              <Users size={17} />
-              <span>Admin Panel</span>
-            </Link>
-          </div>
-        )}
       </nav>
 
       {/* User Footer */}
-      <div style={{
-        padding: '0.75rem',
-        borderTop: '1px solid var(--surface-4)',
-      }}>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '0.75rem',
-          padding: '0.625rem 0.875rem', borderRadius: 'var(--radius-md)',
-        }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--color-primary-700), var(--color-accent-600))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '0.875rem', fontWeight: 600, color: 'white', flexShrink: 0,
-          }}>
+      <div className="p-4 border-t border-[var(--surface-3)] bg-[var(--surface-2)]">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[var(--color-primary-700)] to-[var(--color-accent-600)] flex items-center justify-center text-sm font-bold text-white shrink-0 shadow-md">
             {user?.username?.[0]?.toUpperCase() || '?'}
           </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{
-              fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {user?.full_name || user?.username}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-bold text-[var(--text-primary)] truncate">
+              {user?.full_name || user?.username || 'Student'}
             </div>
-            <div style={{
-              fontSize: '0.6875rem', color: 'var(--text-muted)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {user?.role}
+            <div className="text-[0.7rem] text-[var(--color-accent-400)] font-semibold truncate uppercase tracking-wider">
+              Level 4 Hacker
             </div>
           </div>
           <button
-            className="btn btn-ghost"
-            style={{ padding: '0.25rem', borderRadius: 6 }}
+            className="p-2 rounded-lg text-[var(--text-muted)] hover:text-red-400 hover:bg-red-400/10 transition-colors"
             onClick={() => logoutMutation.mutate()}
             title="Sign out"
-            aria-label="Sign out"
           >
-            <LogOut size={15} />
+            <LogOut size={16} />
           </button>
         </div>
       </div>

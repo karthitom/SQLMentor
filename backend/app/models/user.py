@@ -21,8 +21,10 @@ class User(BaseModel):
     is_active: bool = True
     is_email_verified: bool = False
     learning_streak_days: int = 0
-    total_analyses: int = 0
-    total_reports: int = 0
+    xp: int = 0
+    level: int = 1
+    badges: list[str] = Field(default_factory=list)
+    completed_modules: list[str] = Field(default_factory=list)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_login_at: Optional[datetime] = None

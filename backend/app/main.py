@@ -19,7 +19,8 @@ from app.core.firebase import init_firebase
 from app.core.redis_client import init_redis, close_redis
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.request_id import RequestIDMiddleware
-from app.api.v1 import auth, users, workspaces, projects, analysis, ai, reports, knowledge, admin, health
+from app.api.v1 import auth, users, ai, reports, knowledge, admin, health
+from app.api.v1 import labs, learning_paths, playground, achievements, gamification
 
 log = structlog.get_logger()
 
@@ -77,13 +78,15 @@ def create_app() -> FastAPI:
     app.include_router(health.router, tags=["Health"])
     app.include_router(auth.router,       prefix=f"{prefix}/auth",       tags=["Authentication"])
     app.include_router(users.router,      prefix=f"{prefix}/users",      tags=["Users"])
-    app.include_router(workspaces.router, prefix=f"{prefix}/workspaces", tags=["Workspaces"])
-    app.include_router(projects.router,   prefix=f"{prefix}/projects",   tags=["Projects"])
-    app.include_router(analysis.router,   prefix=f"{prefix}/analysis",   tags=["Analysis"])
     app.include_router(ai.router,         prefix=f"{prefix}/ai",         tags=["AI Engine"])
     app.include_router(reports.router,    prefix=f"{prefix}/reports",    tags=["Reports"])
     app.include_router(knowledge.router,  prefix=f"{prefix}/knowledge",  tags=["Knowledge Base"])
     app.include_router(admin.router,      prefix=f"{prefix}/admin",      tags=["Admin"])
+    app.include_router(labs.router,       prefix=f"{prefix}/labs",       tags=["Labs"])
+    app.include_router(learning_paths.router, prefix=f"{prefix}/paths",  tags=["Learning Paths"])
+    app.include_router(playground.router, prefix=f"{prefix}/playground", tags=["Playground"])
+    app.include_router(achievements.router, prefix=f"{prefix}/achievements", tags=["Achievements"])
+    app.include_router(gamification.router, prefix=f"{prefix}/gamification", tags=["Gamification"])
 
     # ── Global Exception Handlers ─────────────────────────────────────────────
     @app.exception_handler(Exception)

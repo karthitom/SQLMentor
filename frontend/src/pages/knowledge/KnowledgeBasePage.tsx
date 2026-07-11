@@ -1,142 +1,56 @@
-import { useQuery } from '@tanstack/react-query'
+import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Link } from 'react-router-dom'
-import { Plus, BookOpen, Clock, Award, ArrowRight, Search } from 'lucide-react'
-import { knowledgeApi } from '@/api/client'
-import { useState } from 'react'
-
-const CATEGORY_COLORS: Record<string, string> = {
-  'sql-injection': 'badge-red',
-  'prevention': 'badge-green',
-  'owasp': 'badge-blue',
-  'secure-coding': 'badge-purple',
-  'databases': 'badge-yellow',
-}
+import { LearningRoadmap, RoadmapNode } from '@/components/Knowledge/LearningRoadmap'
 
 export default function KnowledgeBasePage() {
-  const [search, setSearch] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const navigate = useNavigate()
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['knowledge', 'articles'],
-    queryFn: async () => {
-      const res = await knowledgeApi.listArticles()
-      return res.data.articles as any[]
-    },
-  })
-
-  const articles = data || []
-  const categories = [...new Set(articles.map((a: any) => a.category))]
-
-  const filtered = articles.filter((a: any) => {
-    const matchSearch = !search || a.title.toLowerCase().includes(search.toLowerCase()) || a.summary?.toLowerCase().includes(search.toLowerCase())
-    const matchCat = !selectedCategory || a.category === selectedCategory
-    return matchSearch && matchCat
-  })
+  const roadmapNodes: RoadmapNode[] = [
+    { id: 'intro', title: '1. Introduction to Cybersecurity', status: 'completed' },
+    { id: 'sql-basics', title: '2. SQL Basics & Refresher', status: 'completed' },
+    { id: 'sql-injection-fundamentals', title: '3. SQL Injection Fundamentals', status: 'current' },
+    { id: 'error-based', title: '4. Error-Based SQLi', status: 'locked' },
+    { id: 'union-based', title: '5. UNION-Based SQLi', status: 'locked' },
+    { id: 'blind-boolean', title: '6. Blind SQLi (Boolean)', status: 'locked' },
+    { id: 'blind-time', title: '7. Blind SQLi (Time-Based)', status: 'locked' },
+    { id: 'secure-coding', title: '8. Secure Coding & Mitigation', status: 'locked' },
+    { id: 'final-exam', title: '9. Final Certification Exam', status: 'locked' },
+  ]
 
   return (
     <div>
-      <div className="page-header">
-        <h1 className="page-title">Knowledge Base</h1>
-        <p className="page-subtitle">Learn SQL injection concepts, secure coding practices, and OWASP guidelines</p>
-      </div>
-
-      {/* Search + Filters */}
-      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
-          <Search size={16} style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-          <input
-            type="search"
-            className="input"
-            style={{ paddingLeft: '2.5rem' }}
-            placeholder="Search articles..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-          <button
-            className={`btn ${!selectedCategory ? 'btn-primary' : 'btn-secondary'} btn-sm`}
-            onClick={() => setSelectedCategory(null)}
-          >
-            All
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              className={`btn ${selectedCategory === cat ? 'btn-primary' : 'btn-secondary'} btn-sm`}
-              onClick={() => setSelectedCategory(cat === selectedCategory ? null : cat)}
-              style={{ textTransform: 'capitalize' }}
-            >
-              {cat.replace(/-/g, ' ')}
-            </button>
-          ))}
+      {/* Hero Section */}
+      <div className="page-header relative overflow-hidden rounded-2xl p-8 mb-12 border border-[var(--surface-3)]" 
+           style={{ background: 'linear-gradient(135deg, var(--surface-2) 0%, var(--surface-1) 100%)' }}>
+        <motion.div 
+          className="absolute -top-32 -right-32 w-64 h-64 rounded-full opacity-10 blur-3xl pointer-events-none"
+          style={{ background: 'var(--color-primary-500)' }}
+          animate={{ scale: [1, 1.2, 1], opacity: [0.1, 0.2, 0.1] }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <div className="relative z-10 text-center max-w-2xl mx-auto">
+          <h1 className="text-4xl font-extrabold text-[var(--text-primary)] mb-4">
+            SQL Injection <span className="text-transparent bg-clip-text bg-gradient-to-r from-[var(--color-primary-400)] to-[var(--color-accent-400)]">Masterclass</span>
+          </h1>
+          <p className="text-lg text-[var(--text-secondary)]">
+            Follow the roadmap below to progress from beginner to advanced. 
+            Unlock interactive labs, quizzes, and earn your certification.
+          </p>
         </div>
       </div>
 
-      {/* Articles Grid */}
-      {isLoading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-          {[...Array(6)].map((_, i) => (
-            <div key={i} className="card skeleton" style={{ height: 180 }} />
-          ))}
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
-          {filtered.map((article: any, i: number) => (
-            <motion.div
-              key={article.slug}
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-            >
-              <Link to={`/knowledge/${article.slug}`} style={{ textDecoration: 'none' }}>
-                <div className="card" style={{ height: '100%', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <span className={`badge ${CATEGORY_COLORS[article.category] || 'badge-gray'}`} style={{ fontSize: '0.6875rem' }}>
-                        {article.category.replace(/-/g, ' ')}
-                      </span>
-                      {article.difficulty_level && (
-                        <span className={`badge ${article.difficulty_level === 'beginner' ? 'badge-green' : article.difficulty_level === 'intermediate' ? 'badge-yellow' : 'badge-red'}`} style={{ fontSize: '0.6875rem' }}>
-                          {article.difficulty_level}
-                        </span>
-                      )}
-                    </div>
-                    <BookOpen size={16} color="var(--text-disabled)" style={{ flexShrink: 0 }} />
-                  </div>
-
-                  <div>
-                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.5rem', lineHeight: 1.3 }}>{article.title}</h3>
-                    <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', lineHeight: 1.6, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                      {article.summary}
-                    </p>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 'auto', fontSize: '0.8125rem', color: 'var(--text-muted)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                      <Clock size={13} />
-                      {article.estimated_read_minutes} min read
-                    </div>
-                    {article.owasp_reference && (
-                      <span style={{ color: 'var(--color-primary-400)', fontSize: '0.75rem', fontFamily: 'var(--font-mono)' }}>
-                        {article.owasp_reference.split('–')[0].trim()}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            </motion.div>
-          ))}
-        </div>
-      )}
-
-      {filtered.length === 0 && !isLoading && (
-        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
-          <BookOpen size={40} style={{ margin: '0 auto 1rem', opacity: 0.4 }} />
-          <p>No articles match your search.</p>
-        </div>
-      )}
+      {/* Roadmap Container */}
+      <div onClick={(e) => {
+        // Simple click handler for the interactive node (MVP)
+        const target = e.target as HTMLElement;
+        const card = target.closest('.hover-card');
+        if (card && card.textContent?.includes('SQL Injection Fundamentals')) {
+          navigate('/knowledge/sql-injection-fundamentals');
+        }
+      }}>
+        <LearningRoadmap nodes={roadmapNodes} />
+      </div>
     </div>
   )
 }
